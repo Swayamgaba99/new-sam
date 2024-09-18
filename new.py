@@ -1,26 +1,37 @@
 import re
-
+import urllib.parse
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry
+from flask import Flask, request, Response, jsonify
+from PIL import Image
+import requests, io
+from base64 import b64encode
 
+app = Flask(__name__)
 
-# Initialize the SAM model
 def load_sam_model():
-    sam_checkpoint = "sam_vit_h_4b8939.pth"  # Path to your SAM model checkpoint
-    model_type = "vit_h"  # Model type: 'vit_h', 'vit_l', or 'vit_b'
+    sam_checkpoint = "sam_vit_h_4b8939.pth"  
+    model_type = "vit_h" 
     
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     predictor = SamPredictor(sam)
     return predictor
 
+
+def extract_image_name(url):
+    parsed_url = urllib.parse.urlparse(url)
+    path = parsed_url.path
+    filename = path.split('/')[-1]
+    return filename
+
+
 def parse_image_name(image_name):
-    # Extract the base name without extension
+    image_name=extract_image_name(image_name)
     base_name = re.sub(r"\.[a-zA-Z0-9]+$", "", image_name)
     print(f"Base name: {base_name}")
     
-    # Split the base name by ' - '
     parts = base_name.split(' - ')
     print(f"Parts after split: {parts}")
     
@@ -55,6 +66,7 @@ def parse_image_name(image_name):
     
     except ValueError as e:
         raise ValueError(f"Error parsing the image name: {base_name}") from e
+
 
 def image_process(image_name, pattern):
     try:
@@ -113,13 +125,47 @@ def image_process(image_name, pattern):
     plt.axis('on')
     plt.show()
 
-# Example usage
-if __name__ == '__main__':
-    image_name = r"C:\Users\anany\Desktop\house-ass\room\1 - 220-100.jpg"
-    pattern = r"C:\Users\anany\Desktop\house-ass\room\wallpaper0.webp"
-    
-    # Run the function
-    image_process(image_name, pattern)
+@app.route('/process_images', methods=['POST'])
+def process_images():
+    product_image_url = request.json.get('product_image_url')
+    room_image_url = request.json.get('room_image_url')
+
+    if not product_image_url or not room_image_url:
+        return 'Please provide product image URL and room image URL.', 400
+
+    try:
+        product_response = requests.get(product_image_url, stream=True)
+        room_response = requests.get(room_image_url, stream=True)
+
+        product_response.raise_for_status()
+        room_response.raise_for_status()
+
+        product_image = Image.open(io.BytesIO(product_response.content))
+        room_image = Image.open(io.BytesIO(room_response.content))
+
+        # Extract image names for logging or potential use
+        product_image_name = extract_image_name(product_image_url)
+        room_image_name = extract_image_name(room_image_url)
+
+        # Process images using your image_process function
+
+        processed_image = image_process(room_image, product_image)
+
+        processed_image_buffer = io.BytesIO()
+        processed_image.save(processed_image_buffer, format='JPEG')
+        processed_image_data = processed_image_buffer.getvalue()
+
+        base64_encoded_image = b64encode(processed_image_data).decode('utf-8')
+
+        return jsonify({'processed_image': base64_encoded_image, 'format': 'JPEG'})
+
+    except requests.exceptions.RequestException as e:
+        print(f'Error fetching images: {e}')
+        return 'Error fetching images.', 500
+    except Exception as e:
+        print(f'Error processing images: {e}')
+        return 'Error processing images.', 500
+
 
 
 
