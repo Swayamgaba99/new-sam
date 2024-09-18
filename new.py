@@ -166,7 +166,8 @@ def process_images():
         print(f'Error processing images: {e}')
         return 'Error processing images.', 500
 
-
+if __name__ == '__main__':
+  app.run(debug=True, port=5000)
 
 
 
