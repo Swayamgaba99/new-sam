@@ -70,12 +70,11 @@ def parse_image_name(image_name):
 
 def image_process(image_name, pattern, product_image_url):
     try:
-        input_label, input_points = parse_image_name(image_name)
+        input_label, input_points = parse_image_name(product_image_url)
     except ValueError as e:
         print(e)
         return
     
-    # Read the input image using OpenCV
     try:
         image = cv2.imread(image_name)
         if image is not None:
