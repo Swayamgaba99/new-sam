@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry
 from flask import Flask, request, Response, jsonify
-from PIL import Image
-import requests, io
+import requests, base64
 from base64 import b64encode
 
 app = Flask(__name__)
@@ -32,7 +31,7 @@ def parse_image_name(image_name):
     base_name = re.sub(r"\.[a-zA-Z0-9]+$", "", image_name)
     print(f"Base name: {base_name}")
     
-    parts = base_name.split(' - ')
+    parts = base_name.split('+-+')
     print(f"Parts after split: {parts}")
     
     if len(parts) != 2:
@@ -91,16 +90,14 @@ def tile_image(replacement_img, target_shape, mask, scale_factor=0.2):
     # Only apply the tiled image to the masked area
     return np.where(mask[:, :, None] > 0, tiled_img, 0)
 
-
-def image_process(image_name, pattern, product_image_url):
+def image_process(image_name, pattern, room_image_url):
     try:
-        input_label, input_points = parse_image_name(product_image_url)
+        input_label, input_points = parse_image_name(room_image_url)
     except ValueError as e:
         print(e)
         return
-    
     try:
-        image = cv2.imread(image_name)
+        image = cv2.imdecode(image_name, cv2.IMREAD_COLOR)
         if image is not None:
             plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
             plt.axis('on')
@@ -126,9 +123,14 @@ def image_process(image_name, pattern, product_image_url):
     best_mask = masks[np.argmax(scores)]
     
     # Read the new pattern image
-    new_image = cv2.imread(pattern)
+    new_image = cv2.imdecode(pattern, cv2.IMREAD_COLOR)
     if new_image is None:
-        print(f"Pattern image not found: {pattern}")
+        if new_image is not None:
+            plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            plt.axis('on')
+            plt.show()
+        else:
+            print(f"Pattern image not found: {pattern}")
         return
     
     # Convert the pattern image to RGB
@@ -150,6 +152,18 @@ def image_process(image_name, pattern, product_image_url):
     plt.axis('on')
     plt.show()
     return img
+def numpy_to_base64(image_array):
+
+    # Convert the image array to a BGR format (if necessary)
+    if image_array.shape[-1] == 3:
+        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+
+    _, encoded_image = cv2.imencode('.jpg', image_array)
+
+    # Convert the encoded image to Base64
+    base64_string = base64.b64encode(encoded_image).decode('utf-8')
+
+    return base64_string
 
 @app.route('/process_images', methods=['POST'])
 def process_images():
@@ -165,21 +179,14 @@ def process_images():
 
         product_response.raise_for_status()
         room_response.raise_for_status()
+        product_image = np.frombuffer(product_response.content, np.uint8)
+        room_image=np.frombuffer(room_response.content,np.uint8)
 
-        product_image = Image.open(io.BytesIO(product_response.content))
-        room_image = Image.open(io.BytesIO(room_response.content))
+        processed_image = image_process(room_image, product_image,room_image_url)
 
-        # Process images using your image_process function
+        base64_encoded_image=numpy_to_base64(processed_image)
 
-        processed_image = image_process(room_image, product_image,product_image_url)
-
-        processed_image_buffer = io.BytesIO()
-        processed_image.save(processed_image_buffer, format='JPEG')
-        processed_image_data = processed_image_buffer.getvalue()
-
-        base64_encoded_image = b64encode(processed_image_data).decode('utf-8')
-
-        return jsonify({'processed_image': base64_encoded_image, 'format': 'JPEG'})
+        return jsonify({'processed_image': base64_encoded_image})
 
     except requests.exceptions.RequestException as e:
         print(f'Error fetching images: {e}')
