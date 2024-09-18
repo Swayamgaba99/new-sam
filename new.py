@@ -68,7 +68,7 @@ def parse_image_name(image_name):
         raise ValueError(f"Error parsing the image name: {base_name}") from e
 
 
-def image_process(image_name, pattern):
+def image_process(image_name, pattern, product_image_url):
     try:
         input_label, input_points = parse_image_name(image_name)
     except ValueError as e:
@@ -146,7 +146,7 @@ def process_images():
 
         # Process images using your image_process function
 
-        processed_image = image_process(room_image, product_image)
+        processed_image = image_process(room_image, product_image,product_image_url)
 
         processed_image_buffer = io.BytesIO()
         processed_image.save(processed_image_buffer, format='JPEG')
