@@ -124,6 +124,7 @@ def image_process(image_name, pattern):
     plt.imshow(img)
     plt.axis('on')
     plt.show()
+    return img
 
 @app.route('/process_images', methods=['POST'])
 def process_images():
@@ -142,10 +143,6 @@ def process_images():
 
         product_image = Image.open(io.BytesIO(product_response.content))
         room_image = Image.open(io.BytesIO(room_response.content))
-
-        # Extract image names for logging or potential use
-        product_image_name = extract_image_name(product_image_url)
-        room_image_name = extract_image_name(room_image_url)
 
         # Process images using your image_process function
 
@@ -168,6 +165,3 @@ def process_images():
 
 if __name__ == '__main__':
   app.run(debug=True, port=5000)
-
-
-
