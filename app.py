@@ -4,9 +4,10 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from segment_anything import SamPredictor, sam_model_registry
-from flask import Flask, request, Response, jsonify
+from flask import Flask, request, jsonify
 import requests, base64
 from base64 import b64encode
+import json
 
 app = Flask(__name__)
 
@@ -99,9 +100,7 @@ def image_process(image_name, pattern, room_image_url):
     try:
         image = cv2.imdecode(image_name, cv2.IMREAD_COLOR)
         if image is not None:
-            plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            plt.axis('on')
-            plt.show()
+            print("Image is loading")
         else:
             print(f"Image not found: {image_name}")
             return
@@ -126,9 +125,7 @@ def image_process(image_name, pattern, room_image_url):
     new_image = cv2.imdecode(pattern, cv2.IMREAD_COLOR)
     if new_image is None:
         if new_image is not None:
-            plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            plt.axis('on')
-            plt.show()
+            print("Image is loading")
         else:
             print(f"Pattern image not found: {pattern}")
         return
@@ -147,10 +144,6 @@ def image_process(image_name, pattern, room_image_url):
     # Apply only to the masked area (pixel by pixel where mask is 1)
     mask_indices = np.where(mask_section)
     img[y:y+h, x:x+w][mask_indices] = tiled_image[mask_indices]
-    
-    plt.imshow(img)
-    plt.axis('on')
-    plt.show()
     return img
 def numpy_to_base64(image_array):
 
@@ -167,26 +160,47 @@ def numpy_to_base64(image_array):
 
 @app.route('/process_images', methods=['POST'])
 def process_images():
-    product_image_url = request.json.get('product_image_url')
-    room_image_url = request.json.get('room_image_url')
-
-    if not product_image_url or not room_image_url:
-        return 'Please provide product image URL and room image URL.', 400
-
+    json_data=request.get_json()
+    if json_data is None:
+      return jsonify({'error': 'No JSON data provided'}), 400
+    categoryname = json_data.get('categoryname')
+    categoryname=categoryname.capitalize()
+    image_urls = []
+    for image in json_data.get('images', []):
+      image_url = image.get('url')
+      if image_url:
+          image_urls.append(image_url)
+    image_url_1=image_urls[0]
+    image_url_2=image_urls[1]
+    url=f"https://newbackend.ayatrio.com/api/fetchProductsByCategory/{categoryname}"
+    response = requests.get(url)
+    response.raise_for_status() 
+    data=json.loads(response.text)
+    product_image_url=data[0]['productImages'][0]['images'][0]
     try:
         product_response = requests.get(product_image_url, stream=True)
-        room_response = requests.get(room_image_url, stream=True)
+        room_response = requests.get(image_url_1, stream=True)
 
         product_response.raise_for_status()
         room_response.raise_for_status()
         product_image = np.frombuffer(product_response.content, np.uint8)
         room_image=np.frombuffer(room_response.content,np.uint8)
 
-        processed_image = image_process(room_image, product_image,room_image_url)
+        processed_image = image_process(room_image, product_image,image_url_1)
 
-        base64_encoded_image=numpy_to_base64(processed_image)
+        base64_encoded_image1=numpy_to_base64(processed_image)
 
-        return jsonify({'processed_image': base64_encoded_image})
+        room_response = requests.get(image_url_2, stream=True)
+
+        room_response.raise_for_status()
+    
+        room_image=np.frombuffer(room_response.content,np.uint8)
+
+        processed_image = image_process(room_image, product_image,image_url_2)
+
+        base64_encoded_image2=numpy_to_base64(processed_image)
+
+        return jsonify({'processed_image1': base64_encoded_image1, 'processed_image2':base64_encoded_image2})
 
     except requests.exceptions.RequestException as e:
         print(f'Error fetching images: {e}')
