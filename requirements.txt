@@ -1,0 +1,11 @@
+flask
+requests
+opencv-python
+numpy
+matplotlib
+scipy
+base64
+urllib3
+segment_anything
+re
+json
