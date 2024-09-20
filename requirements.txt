@@ -9,3 +9,6 @@ urllib3
 segment_anything
 re
 json
+torch
+torchvision
+torchaudio
